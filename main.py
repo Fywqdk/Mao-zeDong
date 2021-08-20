@@ -6,82 +6,77 @@ from replit import db
 
 client = discord.Client()
 
-
-players = {}
-
-
-class Player(object):
-  def __init__(self, user_name, user_id):
-    self.user_name = user_name
-    self.user_id = user_id
-    self.dongs = 0
-    self.last_dong = 'Never'
-    self.self_dongs = 0
-    self.last_self_dong = 'Never'
-
-  def dong(self):
-    self.dongs += 1
-    last_dong = self.last_dong
-    now = time.time()
-    self.last_dong = time.ctime(now)
-    return self.dongs, last_dong
-
-  def self_dong(self):
-    self.self_dongs += 1
-    last_self_dong = self.last_self_dong
-    now = time.time()
-    self.last_self_dong = time.ctime(now)
-    return self.self_dongs, last_self_dong
+if not "players" in db.keys():
+  db["players"] = ""
+  print('Creating player list')
 
 
-def do_dong(user_id, user_name):
-#  players = db["data_dict"]
-  if user_id in players.keys():
-    player = players[user_id]
-    dongs, last_dong = player.dong()
-    players[user_id] = player
+def do_localtime(epoch_time):
+  day = time.localtime(epoch_time)[2]
+
+  months = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December']
+
+  month = months[time.localtime(epoch_time)[1]-1]
+
+  year = time.localtime(epoch_time)[0]
+  hour = ('00' + str(time.localtime(epoch_time)[3]))[-2:]
+  minute = ('00' + str(time.localtime(epoch_time)[4]))[-2:]
+
+  weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', ]
+  weekday = weekdays[time.localtime(epoch_time)[6]-1]
+
+  return f'{weekday}, {day}. of {month} {year}, at {hour}:{minute}'
+
+
+
+def do_dong(user_id, user_name, dong_type):
+#  print(f'{user_id}, {user_name}, {dong_type}')
+  nu = time.time()
+  if user_id in db["players"].split(", "):
+    user_str = db[user_id]
+    user_name, dongs, last_dong, self_dongs, last_self_dong = user_str.split(", ")
+    if dong_type == 1:
+      last_dong = float(last_dong)
+      dongs = int(dongs) + 1
+      db_string = f'{user_name}, {dongs}, {nu}, {self_dongs}, {last_self_dong}'
+      db[user_id] = db_string
+      return dongs, last_dong
+    else:
+      last_self_dong = float(last_self_dong)
+      self_dongs = int(self_dongs) + 1
+      db_string = f'{user_name}, {dongs}, {last_dong}, {self_dongs}, {nu}'
+      db[user_id] = db_string
+      return self_dongs, last_self_dong
+
   else:
-    try:
-      player = Player(user_name, user_id)
-      dongs, last_dong = player.dong()
-      players[user_id] = player
-    except:
-      print("could not add player")
-      dongs = 0
-      last_dong = "error"
+    if dong_type == 1:
+      db_string = f'{user_name}, 1, {nu}, 0, 0'
+    else:
+      db_string = f'{user_name}, 0, 0, 1, {nu}'
+    print(f'Creating new player, {user_name}')
+    player_str = db["players"]
+    if player_str == "":
+      player_str = user_id
+    else:
+      player_str += ", " + user_id
 
-#  db["data_dict"] = players
-  return dongs, last_dong
-
-
-def do_self_dong(user_id, user_name):
-#  players = db["data_dict"]
-  if user_id in players.keys():
-    player = players[user_id]
-    dongs, last_dong = player.self_dong()
-    players[user_id] = player
-  else:
-    try:
-      player = Player(user_name, user_id)
-      dongs, last_dong = player.self_dong()
-      players[user_id] = player
-    except:
-      print("could not add player")
-      dongs = 0
-      last_dong = "error"
-
-#  db["data_dict"] = players
-  return dongs, last_dong
-
+    db["players"] = player_str
+    db[user_id] = db_string
+    return 1, 0
 
 def do_standings():
-#  players = db["data_dict"]
   stats = []
-  for key in players:
-    player = players[key]
-    stats.append((player.user_name, player.dongs, player.self_dongs))
-  dong_top = sorted(stats, key=lambda tup: tup[1], reverse=True)
-  self_dong_top = sorted(stats, key=lambda tup: tup[2], reverse=True)
+  for player in db["players"].split(", "):
+    try:
+      user_str = db[player]
+      user_name, dongs, last_dong, self_dongs, last_self_dong = user_str.split(", ")
+      stats.append((user_name, int(dongs), int(self_dongs)))
+      dong_top = sorted(stats, key=lambda tup: tup[1], reverse=True)
+      self_dong_top = sorted(stats, key=lambda tup: tup[2], reverse=True)
+    except:
+      print('error doing standings')
+
   return dong_top, self_dong_top
 
 
@@ -103,11 +98,21 @@ async def on_message(message):
     await message.reply('Hello!', mention_author=True)
 
   if msg.startswith('!dong') or msg.startswith('!Dong'):
-    dongs, last_dong = do_dong(user_id, user_name)
+    dongs, last_dong = do_dong(str(user_id), user_name, 1)
+    if last_dong == 0:
+      last_dong = "Never!"
+    else:
+      last_dong = do_localtime(last_dong)
+
     await message.reply(f'DONG!! {user_name} has scored! {user_name} now has {dongs} dongs! Last dong was: {last_dong}')
 
   if msg.startswith('!selfdong') or msg.startswith('!SelfDong'):
-    dongs, last_dong = do_self_dong(user_id, user_name)
+    dongs, last_dong = do_dong(str(user_id), user_name, 2)
+    if last_dong == 0:
+      last_dong = "Never!"
+    else:
+      last_dong = do_localtime(last_dong)
+
     await message.reply(f'SELFDONG!! {user_name} has been good to themself! {user_name} now has {dongs} selfdongs! Last selfdong was: {last_dong}')
 
   if msg.startswith('!standings'):
